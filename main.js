@@ -65,8 +65,28 @@ function createWindow() {
     });
   });
 
-  // Native Context Menu Handler
-  ipcMain.on('show-context-menu', (event, { roamMode, sleeping }) => {
+  // Native Context Menu Handler with dynamic skin scanning
+  ipcMain.on('show-context-menu', (event, { roamMode, sleeping, activeSkin }) => {
+    const fs = require('fs');
+    const petsDir = path.join(__dirname, 'pets');
+    const skins = [];
+    if (fs.existsSync(petsDir)) {
+      const dirs = fs.readdirSync(petsDir);
+      for (const dir of dirs) {
+        const configPath = path.join(petsDir, dir, 'config.json');
+        let skinName = dir;
+        if (fs.existsSync(configPath)) {
+          try {
+            const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+            skinName = config.name || dir;
+          } catch (e) {
+            console.error('Error parsing config for skin:', dir, e);
+          }
+        }
+        skins.push({ id: dir, name: skinName });
+      }
+    }
+
     const template = [
       { label: '🍎 餵食蘋果', click: () => { event.sender.send('menu-feed', 'apple'); } },
       { label: '🎂 餵食蛋糕', click: () => { event.sender.send('menu-feed', 'cake'); } },
@@ -93,6 +113,16 @@ function createWindow() {
       {
         label: sleeping ? '💤 喚醒寵物' : '💤 讓牠睡覺',
         click: () => { event.sender.send('menu-toggle-sleep'); }
+      },
+      { type: 'separator' },
+      {
+        label: '🎭 更換外觀 (Skins)',
+        submenu: skins.map(skin => ({
+          label: skin.name,
+          type: 'radio',
+          checked: activeSkin === skin.id,
+          click: () => { event.sender.send('menu-set-skin', skin.id); }
+        }))
       },
       { type: 'separator' },
       {

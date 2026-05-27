@@ -78,132 +78,110 @@ let roamTimer   = 120;
 // --- Precise Mathematically-Derived Sprite Coordinates (Zero-Bleed) ---
 // Scanned and calculated using native canvas alpha bounding-box analysis with strict row-separation.
 // Ensures absolute zero vertical or horizontal overlap with adjacent frames, removing all border and cutoff artifacts.
-const ROW1 = [
-  [41, 55, 190, 179],
-  [242, 55, 190, 179],
-  [448, 55, 190, 179],
-  [635, 55, 190, 179],
-  [819, 55, 190, 179]
-];
-const ROW2 = [
-  [56, 293, 234, 147],
-  [297, 293, 250, 147], // Starts at 297 to completely skip the yellow leaf tip of Frame 0 (which ends at 296)
-  [550, 293, 240, 147],
-  [790, 293, 200, 147]
-];
-const ROW3 = [
-  [46, 479, 230, 149],
-  [290, 479, 240, 149],
-  [530, 479, 230, 149],
-  [760, 479, 221, 149]
-];
+let ROW1 = [];
+let ROW2 = [];
+let ROW3 = [];
+let ANIMS = {};
 
+function rebuildAnimations() {
+  ANIMS = {
+    // Default resting pose — single frame + CSS-like breathing in code
+    idle: {
+      frames: [ROW1[0]],
+      fps: 2,
+      loop: true,
+      next: null
+    },
 
-/**
- * ANIMATIONS
- * Each entry: { frames: [[sx,sy,sw,sh],...], fps, loop, next }
- *   loop: true  → keep looping
- *   loop: false → play once then switch to `next`
- *   next: name of animation to switch to, or null
- */
-const ANIMS = {
+    // Slow walk (idle + leaning forward)
+    walk: {
+      frames: [ROW1[0], ROW2[3]],
+      fps: 3.5,
+      loop: true,
+      next: null
+    },
 
-  // Default resting pose — single frame + CSS-like breathing in code
-  idle: {
-    frames: [ROW1[0]],
-    fps: 2,
-    loop: true,
-    next: null
-  },
+    // Fast roll (idle + leaning + rolling/sliding)
+    roll: {
+      frames: [ROW1[0], ROW2[3], ROW3[3], ROW2[3]],
+      fps: 5.5,
+      loop: true,
+      next: null
+    },
 
-  // Slow walk (idle + leaning forward)
-  walk: {
-    frames: [ROW1[0], ROW2[3]],
-    fps: 3.5,
-    loop: true,
-    next: null
-  },
+    // Yawn sequence (row1 frames 0→4)
+    yawn: {
+      frames: [...ROW1],
+      fps: 5,
+      loop: false,
+      next: 'idle'
+    },
 
-  // Fast roll (idle + leaning + rolling/sliding)
-  roll: {
-    frames: [ROW1[0], ROW2[3], ROW3[3], ROW2[3]],
-    fps: 5.5,
-    loop: true,
-    next: null
-  },
+    // Falling asleep transition: row1[0] → row2[0] → row2[1]
+    fallAsleep: {
+      frames: [ROW1[0], ROW2[0], ROW2[1]],
+      fps: 3,
+      loop: false,
+      next: 'sleep'
+    },
 
-  // Yawn sequence (row1 frames 0→4)
-  yawn: {
-    frames: [...ROW1],
-    fps: 5,
-    loop: false,
-    next: 'idle'
-  },
+    // Main sleep loop — alternates between flat-asleep and deep-sleep-bubbles
+    sleep: {
+      frames: [ROW2[1], ROW2[2], ROW2[1], ROW2[3]],
+      fps: 1.5,
+      loop: true,
+      next: null
+    },
 
-  // Falling asleep transition: row1[0] → row2[0] → row2[1]
-  fallAsleep: {
-    frames: [ROW1[0], ROW2[0], ROW2[1]],
-    fps: 3,
-    loop: false,
-    next: 'sleep'
-  },
+    // Wake up: reverse the fall-asleep
+    wakeUp: {
+      frames: [ROW2[1], ROW2[0], ROW1[0]],
+      fps: 4,
+      loop: false,
+      next: 'idle'
+    },
 
-  // Main sleep loop — alternates between flat-asleep and deep-sleep-bubbles
-  sleep: {
-    frames: [ROW2[1], ROW2[2], ROW2[1], ROW2[3]],
-    fps: 1.5,
-    loop: true,
-    next: null
-  },
+    // Eating cake (loops while food is active)
+    eatCake: {
+      frames: [ROW3[0], ROW1[0]],
+      fps: 4,
+      loop: false,
+      next: 'happy'
+    },
 
-  // Wake up: reverse the fall-asleep
-  wakeUp: {
-    frames: [ROW2[1], ROW2[0], ROW1[0]],
-    fps: 4,
-    loop: false,
-    next: 'idle'
-  },
+    // Eating apple
+    eatApple: {
+      frames: [ROW3[1], ROW1[0]],
+      fps: 4,
+      loop: false,
+      next: 'happy'
+    },
 
-  // Eating cake (loops while food is active)
-  eatCake: {
-    frames: [ROW3[0], ROW1[0]],
-    fps: 4,
-    loop: false,
-    next: 'happy'
-  },
+    // Content / satisfied after eating
+    happy: {
+      frames: [ROW3[2], ROW3[3], ROW3[2], ROW3[3], ROW1[0]],
+      fps: 6,
+      loop: false,
+      next: 'idle'
+    },
 
-  // Eating apple
-  eatApple: {
-    frames: [ROW3[1], ROW1[0]],
-    fps: 4,
-    loop: false,
-    next: 'happy'
-  },
+    // Quick wiggle when petted
+    wiggle: {
+      frames: [ROW3[3], ROW3[2], ROW3[3], ROW3[2], ROW1[0]],
+      fps: 7,
+      loop: false,
+      next: 'idle'
+    },
 
-  // Content / satisfied after eating
-  happy: {
-    frames: [ROW3[2], ROW3[3], ROW3[2], ROW3[3], ROW1[0]],
-    fps: 6,
-    loop: false,
-    next: 'idle'
-  },
-
-  // Quick wiggle when petted
-  wiggle: {
-    frames: [ROW3[3], ROW3[2], ROW3[3], ROW3[2], ROW1[0]],
-    fps: 7,
-    loop: false,
-    next: 'idle'
-  },
-
-  // Surprised/dragged — use the agitated sleep-fall frame
-  drag: {
-    frames: [ROW2[0]],
-    fps: 2,
-    loop: true,
-    next: null
-  }
-};
+    // Surprised/dragged — use the agitated sleep-fall frame
+    drag: {
+      frames: [ROW2[0]],
+      fps: 2,
+      loop: true,
+      next: null
+    }
+  };
+}
 
 // ═══════════════════════════════════════════════════════
 // SECTION 4 — SPRITE LOADER WITH WHITE-BG REMOVAL
@@ -235,7 +213,107 @@ function loadAndProcessSprites(src) {
   img.src = src;
 }
 
-loadAndProcessSprites('sprites.png');
+// --- Modular Hot-Swapping Skin Engine ---
+let activeSkin = 'gulpin';
+let petName = 'Gulpin';
+let customScale = 1.0;
+
+function loadSkin(skinId) {
+  const fs = require('fs');
+  const path = require('path');
+  
+  const skinDir = path.join(__dirname, 'pets', skinId);
+  const configPath = path.join(skinDir, 'config.json');
+  const spritePath = path.join(skinDir, 'sprites.png');
+
+  if (!fs.existsSync(spritePath)) {
+    console.error('Sprite sheet not found for skin:', skinId);
+    return;
+  }
+
+  activeSkin = skinId;
+  spriteReady = false;
+
+  let coordinates = null;
+  petName = skinId;
+  customScale = 1.0;
+
+  if (fs.existsSync(configPath)) {
+    try {
+      const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+      petName = config.name || skinId;
+      if (config.behavior) {
+        if (typeof config.behavior.scale === 'number') {
+          customScale = config.behavior.scale;
+        }
+      }
+      if (config.coordinates) {
+        coordinates = config.coordinates;
+      }
+    } catch (e) {
+      console.error('Error parsing config for skin:', skinId, e);
+    }
+  }
+
+  if (coordinates && coordinates.row1 && coordinates.row2 && coordinates.row3) {
+    // 1. Advanced Custom Coordinates Mode
+    ROW1 = coordinates.row1;
+    ROW2 = coordinates.row2;
+    ROW3 = coordinates.row3;
+    console.log(`Loaded custom coordinates for ${petName}`);
+  } else {
+    // 2. Standard 250x200 Grid Layout fallback mode
+    const CELL_W = 250;
+    const CELL_H = 200;
+    
+    function makeGridFrames(row, cols) {
+      const frames = [];
+      const y = row * CELL_H;
+      for (let i = 0; i < cols; i++) {
+        frames.push([i * CELL_W, y, CELL_W, CELL_H]);
+      }
+      return frames;
+    }
+    
+    ROW1 = makeGridFrames(0, 5);
+    ROW2 = makeGridFrames(1, 4);
+    ROW3 = makeGridFrames(2, 4);
+    console.log(`Loaded standard 250x200 grid coordinates for ${petName}`);
+  }
+
+  // Hot-rebuild animations using the new frame array references
+  rebuildAnimations();
+
+  // Reload sprites off-screen
+  loadAndProcessSprites(spritePath);
+  
+  // Save active skin selection
+  try {
+    fs.writeFileSync(path.join(__dirname, 'active_pet.json'), JSON.stringify({ activeSkin }));
+  } catch (e) {}
+}
+
+// IPC listener to swap skins from right-click context menu
+ipcRenderer.on('menu-set-skin', (event, skinId) => {
+  loadSkin(skinId);
+  playAnim('idle', true);
+});
+
+// Load the persisted skin selection (or default to gulpin) at startup
+let startupSkin = 'gulpin';
+try {
+  const fs = require('fs');
+  const path = require('path');
+  const settingsPath = path.join(__dirname, 'active_pet.json');
+  if (fs.existsSync(settingsPath)) {
+    const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+    if (settings.activeSkin) {
+      startupSkin = settings.activeSkin;
+    }
+  }
+} catch (e) {}
+
+loadSkin(startupSkin);
 
 // ═══════════════════════════════════════════════════════
 // SECTION 5 — ANIMATION STATE MACHINE
@@ -441,7 +519,7 @@ window.addEventListener('contextmenu', (e) => {
   e.preventDefault();
   if (isPixelOpaque(e.clientX, e.clientY)) {
     const sleeping = (currentAnim === 'sleep' || currentAnim === 'fallAsleep');
-    ipcRenderer.send('show-context-menu', { roamMode, sleeping });
+    ipcRenderer.send('show-context-menu', { roamMode, sleeping, activeSkin });
   }
 });
 

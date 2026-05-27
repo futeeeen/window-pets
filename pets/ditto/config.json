@@ -1,0 +1,9 @@
+{
+  "name": "Ditto (百變怪)",
+  "author": "Antigravity",
+  "version": "1.0.0",
+  "behavior": {
+    "speed": 1.5,
+    "scale": 0.9
+  }
+}
