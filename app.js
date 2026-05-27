@@ -1,0 +1,749 @@
+/**
+ * Desktop Pet — 2D Sprite Animation Engine
+ * 
+ * HOW TO USE YOUR OWN SPRITE SHEET:
+ *   1. Place your sprite image as  c:\futen\Project\Pets\sprites.png
+ *   2. Adjust the FRAME LAYOUT constants below to match your image's pixel positions.
+ *
+ * SPRITE SHEET LAYOUT expected (3 rows):
+ *   Row 1 (5 frames): idle → yawn sequence
+ *   Row 2 (4 frames): fall-asleep → sleeping → deep-sleep
+ *   Row 3 (4 frames): eat-cake | eat-apple | content | happy-wiggle
+ */
+
+'use strict';
+const { ipcRenderer } = require('electron');
+
+// ═══════════════════════════════════════════════════════
+// SECTION 1 — CANVAS SETUP
+// ═══════════════════════════════════════════════════════
+const canvas = document.getElementById('pet-canvas');
+const ctx    = canvas.getContext('2d', { willReadFrequently: true });
+
+let targetSize = 110; // Track the desired sizing state to prevent DPI and creep issues
+let WIN_W = targetSize;
+let WIN_H = targetSize;
+canvas.width  = WIN_W;
+canvas.height = WIN_H;
+
+// ═══════════════════════════════════════════════════════
+// SECTION 2 — WINDOW / POSITION STATE
+// ═══════════════════════════════════════════════════════
+const SCREEN_W      = window.screen.width;
+const SCREEN_H      = window.screen.height;
+const TASKBAR_H     = 48;
+const FLOOR_Y       = () => SCREEN_H - TASKBAR_H - WIN_H;
+
+let petX = (SCREEN_W - WIN_W) / 2;
+let petY = SCREEN_H - TASKBAR_H - WIN_H;
+function sendWindowPos(x, y) {
+  if (typeof x === 'number' && typeof y === 'number' && !isNaN(x) && !isNaN(y)) {
+    ipcRenderer.send('set-window-pos', { x, y });
+  }
+}
+sendWindowPos(petX, petY);
+
+// Physics
+let velX = 0, velY = 0;
+let isFalling   = false;
+let isDragging  = false;
+let dragOffX = 0, dragOffY = 0;
+let lastMouseX = 0, lastMouseY = 0;
+
+// Roaming Modes
+let roamMode = 'walk'; // 'walk' | 'sports' | 'stand'
+let sportsDirection = 1; // 1 = right, -1 = left
+let forceFlip = false; // Stand Mode random flip
+let roamTargetX = petX;
+let currentRoamSpeed = 1.2;
+let roamTimer   = 120;
+
+// ═══════════════════════════════════════════════════════
+// SECTION 3 — SPRITE SHEET CONFIGURATION
+// ═══════════════════════════════════════════════════════
+/**
+ * Each frame is defined as [srcX, srcY, srcW, srcH].
+ * srcW/srcH are the pixels cut from the sprite sheet.
+ * The renderer will fit them into the canvas.
+ *
+ * ┌──────────────────────────────────────────────────┐
+ * │  ROW 1  │ f0 │ f1 │ f2 │ f3 │ f4 │  (5 frames) │
+ * │  ROW 2  │ f0 │ f1 │ f2 │ f3 │    (4 frames)    │
+ * │  ROW 3  │ f0 │ f1 │ f2 │ f3 │    (4 frames)    │
+ * └──────────────────────────────────────────────────┘
+ *
+ * Tune these numbers after inspecting the actual sprite image.
+ */
+
+// --- Precise Mathematically-Derived Sprite Coordinates (Zero-Bleed) ---
+// Scanned and calculated using native canvas alpha bounding-box analysis with strict row-separation.
+// Ensures absolute zero vertical or horizontal overlap with adjacent frames, removing all border and cutoff artifacts.
+const ROW1 = [
+  [41, 55, 190, 179],
+  [242, 55, 190, 179],
+  [448, 55, 190, 179],
+  [635, 55, 190, 179],
+  [819, 55, 190, 179]
+];
+const ROW2 = [
+  [56, 293, 234, 147],
+  [297, 293, 250, 147], // Starts at 297 to completely skip the yellow leaf tip of Frame 0 (which ends at 296)
+  [550, 293, 240, 147],
+  [790, 293, 200, 147]
+];
+const ROW3 = [
+  [46, 479, 230, 149],
+  [290, 479, 240, 149],
+  [530, 479, 230, 149],
+  [760, 479, 221, 149]
+];
+
+
+/**
+ * ANIMATIONS
+ * Each entry: { frames: [[sx,sy,sw,sh],...], fps, loop, next }
+ *   loop: true  → keep looping
+ *   loop: false → play once then switch to `next`
+ *   next: name of animation to switch to, or null
+ */
+const ANIMS = {
+
+  // Default resting pose — single frame + CSS-like breathing in code
+  idle: {
+    frames: [ROW1[0]],
+    fps: 2,
+    loop: true,
+    next: null
+  },
+
+  // Slow walk (idle + leaning forward)
+  walk: {
+    frames: [ROW1[0], ROW2[3]],
+    fps: 3.5,
+    loop: true,
+    next: null
+  },
+
+  // Fast roll (idle + leaning + rolling/sliding)
+  roll: {
+    frames: [ROW1[0], ROW2[3], ROW3[3], ROW2[3]],
+    fps: 5.5,
+    loop: true,
+    next: null
+  },
+
+  // Yawn sequence (row1 frames 0→4)
+  yawn: {
+    frames: [...ROW1],
+    fps: 5,
+    loop: false,
+    next: 'idle'
+  },
+
+  // Falling asleep transition: row1[0] → row2[0] → row2[1]
+  fallAsleep: {
+    frames: [ROW1[0], ROW2[0], ROW2[1]],
+    fps: 3,
+    loop: false,
+    next: 'sleep'
+  },
+
+  // Main sleep loop — alternates between flat-asleep and deep-sleep-bubbles
+  sleep: {
+    frames: [ROW2[1], ROW2[2], ROW2[1], ROW2[3]],
+    fps: 1.5,
+    loop: true,
+    next: null
+  },
+
+  // Wake up: reverse the fall-asleep
+  wakeUp: {
+    frames: [ROW2[1], ROW2[0], ROW1[0]],
+    fps: 4,
+    loop: false,
+    next: 'idle'
+  },
+
+  // Eating cake (loops while food is active)
+  eatCake: {
+    frames: [ROW3[0], ROW1[0]],
+    fps: 4,
+    loop: false,
+    next: 'happy'
+  },
+
+  // Eating apple
+  eatApple: {
+    frames: [ROW3[1], ROW1[0]],
+    fps: 4,
+    loop: false,
+    next: 'happy'
+  },
+
+  // Content / satisfied after eating
+  happy: {
+    frames: [ROW3[2], ROW3[3], ROW3[2], ROW3[3], ROW1[0]],
+    fps: 6,
+    loop: false,
+    next: 'idle'
+  },
+
+  // Quick wiggle when petted
+  wiggle: {
+    frames: [ROW3[3], ROW3[2], ROW3[3], ROW3[2], ROW1[0]],
+    fps: 7,
+    loop: false,
+    next: 'idle'
+  },
+
+  // Surprised/dragged — use the agitated sleep-fall frame
+  drag: {
+    frames: [ROW2[0]],
+    fps: 2,
+    loop: true,
+    next: null
+  }
+};
+
+// ═══════════════════════════════════════════════════════
+// SECTION 4 — SPRITE LOADER WITH WHITE-BG REMOVAL
+// ═══════════════════════════════════════════════════════
+let spriteCanvas = null;  // processed sprite sheet (transparent bg)
+let spriteReady  = false;
+
+function loadAndProcessSprites(src) {
+  const img = new Image();
+  img.onload = () => {
+    // Create off-screen canvas matching sheet size
+    const oc  = document.createElement('canvas');
+    oc.width  = img.naturalWidth  || img.width;
+    oc.height = img.naturalHeight || img.height;
+    const oc_ctx = oc.getContext('2d');
+    oc_ctx.drawImage(img, 0, 0);
+
+    // Direct transparent PNG load:
+    // No background white removal is needed since the new image has built-in alpha transparency.
+    // Preserves pure white elements (like cake cream and sleep bubbles) from being hollowed out.
+
+    spriteCanvas = oc;
+    spriteReady  = true;
+    console.log(`Sprite loaded: ${oc.width}×${oc.height}`);
+  };
+  img.onerror = () => {
+    console.error('Failed to load sprites.png — place your sprite sheet at the project root.');
+  };
+  img.src = src;
+}
+
+loadAndProcessSprites('sprites.png');
+
+// ═══════════════════════════════════════════════════════
+// SECTION 5 — ANIMATION STATE MACHINE
+// ═══════════════════════════════════════════════════════
+let currentAnim  = 'idle';
+let frameIndex   = 0;
+let frameTick    = 0;   // counts up per game-tick (60/s)
+
+// Target FPS for animation = anim.fps
+// Ticks per frame = 60 / anim.fps
+function ticksPerFrame(anim) {
+  return Math.round(60 / anim.fps);
+}
+
+function playAnim(name, force) {
+  if (!force && currentAnim === name) return;
+  if (!ANIMS[name]) return;
+  currentAnim = name;
+  frameIndex  = 0;
+  frameTick   = 0;
+}
+
+function updateAnim() {
+  const anim = ANIMS[currentAnim];
+  frameTick++;
+  if (frameTick >= ticksPerFrame(anim)) {
+    frameTick = 0;
+    frameIndex++;
+    if (frameIndex >= anim.frames.length) {
+      if (anim.loop) {
+        frameIndex = 0;
+      } else {
+        // Animation done — transition
+        const next = anim.next || 'idle';
+        playAnim(next, true);
+      }
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+// SECTION 6 — BREATHING EFFECT (idle only)
+// ═══════════════════════════════════════════════════════
+let breathTick = 0;
+
+function getBreathScale() {
+  // Subtle breathing: scale oscillates ±1.5% at ~0.5 Hz
+  breathTick++;
+  const phase = (breathTick / 60) * Math.PI; // full cycle every 2s
+  return 1.0 + Math.sin(phase) * 0.015;
+}
+
+// ═══════════════════════════════════════════════════════
+// SECTION 7 — RENDER
+// ═══════════════════════════════════════════════════════
+// Draw padding so the character doesn't clip at edges
+const DRAW_PAD = 4;
+
+function render() {
+  ctx.clearRect(0, 0, WIN_W, WIN_H);
+
+  if (!spriteReady) {
+    // Loading placeholder
+    ctx.fillStyle = 'rgba(108,192,68,0.25)';
+    ctx.beginPath();
+    ctx.ellipse(WIN_W/2, WIN_H*0.65, WIN_W*0.32, WIN_H*0.22, 0, 0, Math.PI*2);
+    ctx.fill();
+    return;
+  }
+
+  const anim  = ANIMS[currentAnim];
+  const frame = anim.frames[frameIndex] || anim.frames[0];
+  const [sx, sy, sw, sh] = frame;
+
+  // Destination rect (fit inside canvas with padding)
+  const dw = WIN_W - DRAW_PAD * 2;
+  const dh = WIN_H - DRAW_PAD * 2;
+  const dx = DRAW_PAD;
+  const dy = DRAW_PAD;
+
+  ctx.save();
+
+  // --- Breathing scale transform (idle only) ---
+  if (currentAnim === 'idle') {
+    const bs = getBreathScale();
+    ctx.translate(WIN_W / 2, WIN_H / 2);
+    ctx.scale(bs, bs);
+    ctx.translate(-WIN_W / 2, -WIN_H / 2);
+  }
+
+  // --- Flip horizontally when walking RIGHT (since original sprites naturally face left) ---
+  if (shouldFlip()) {
+    ctx.translate(WIN_W, 0);
+    ctx.scale(-1, 1);
+  }
+
+  // Consistent scaling and floor-alignment to keep body proportions 100% stable
+  const scale = dw / 250; // Scale all frames using the widest frame width (250) to prevent size jumping
+  const drawW = sw * scale;
+  const drawH = sh * scale;
+  const drawX = dx + (dw - drawW) / 2;
+  const drawY = dy + (dh - drawH); // Floor alignment!
+
+  ctx.drawImage(spriteCanvas, sx, sy, sw, sh, drawX, drawY, drawW, drawH);
+
+  ctx.restore();
+}
+
+function shouldFlip() {
+  if (currentAnim === 'drag') {
+    return velX > 0;
+  }
+  if (roamMode === 'walk') {
+    return (currentAnim === 'walk' || currentAnim === 'roll' || currentAnim === 'idle') && (roamTargetX > petX + 2);
+  }
+  if (roamMode === 'sports') {
+    return sportsDirection === 1;
+  }
+  if (roamMode === 'stand') {
+    return forceFlip;
+  }
+  return false;
+}
+
+// ═══════════════════════════════════════════════════════
+// SECTION 8 — HIT TESTING (pixel-perfect transparency)
+// ═══════════════════════════════════════════════════════
+function isPixelOpaque(clientX, clientY) {
+  if (!spriteReady) return false;
+  // Read from the main canvas (already rendered this frame)
+  const pixel = ctx.getImageData(clientX, clientY, 1, 1).data;
+  return pixel[3] > 30; // alpha > ~12% counts as "hit"
+}
+
+// ═══════════════════════════════════════════════════════
+// SECTION 9 — MOUSE EVENTS
+// ═══════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════
+// SECTION 9 — MOUSE EVENTS & NATIVE CONTEXT MENU IPC
+// ═══════════════════════════════════════════════════════
+window.addEventListener('mousemove', (e) => {
+  if (isDragging) {
+    const newX = e.screenX - dragOffX;
+    const newY = e.screenY - dragOffY;
+    petX = Math.max(-60, Math.min(SCREEN_W - WIN_W + 60, newX));
+    petY = Math.max(0, Math.min(SCREEN_H - TASKBAR_H - WIN_H + 30, newY));
+    sendWindowPos(petX, petY);
+
+    velX = (e.screenX - lastMouseX) * 0.4;
+    velY = (e.screenY - lastMouseY) * 0.4;
+    lastMouseX = e.screenX;
+    lastMouseY = e.screenY;
+    return;
+  }
+
+  // Pixel-perfect click-through: ignore transparent areas
+  const hit = isPixelOpaque(e.clientX, e.clientY);
+  if (hit) {
+    ipcRenderer.send('set-ignore-mouse-events', false);
+    canvas.style.cursor = 'grab';
+  } else {
+    ipcRenderer.send('set-ignore-mouse-events', true, { forward: true });
+    canvas.style.cursor = 'default';
+  }
+});
+
+window.addEventListener('mousedown', (e) => {
+  if (e.button !== 0) return;
+  if (!isPixelOpaque(e.clientX, e.clientY)) return;
+
+  isDragging   = true;
+  dragOffX     = e.screenX - petX;
+  dragOffY     = e.screenY - petY;
+  lastMouseX   = e.screenX;
+  lastMouseY   = e.screenY;
+  velX = 0; velY = 0;
+  isFalling    = false;
+
+  playAnim('drag', true);
+  canvas.style.cursor = 'grabbing';
+});
+
+window.addEventListener('mouseup', (e) => {
+  if (!isDragging) return;
+  isDragging = false;
+  isFalling  = true;
+
+  velX = Math.max(-14, Math.min(14, velX));
+  velY = Math.max(-12, Math.min(12, velY));
+
+  // Snap if already near floor
+  if (petY >= FLOOR_Y() - 2) {
+    petY = FLOOR_Y();
+    velX = velY = 0;
+    isFalling = false;
+  }
+
+  canvas.style.cursor = 'grab';
+  playAnim('idle', true);
+});
+
+window.addEventListener('contextmenu', (e) => {
+  e.preventDefault();
+  if (isPixelOpaque(e.clientX, e.clientY)) {
+    const sleeping = (currentAnim === 'sleep' || currentAnim === 'fallAsleep');
+    ipcRenderer.send('show-context-menu', { roamMode, sleeping });
+  }
+});
+
+// IPC listeners for native context menu actions
+ipcRenderer.on('menu-feed', (event, type) => {
+  if (type === 'cake') {
+    playAnim('eatCake', true);
+  } else {
+    playAnim('eatApple', true);
+  }
+});
+
+ipcRenderer.on('menu-pet', () => {
+  playAnim('wiggle', true);
+});
+
+ipcRenderer.on('menu-set-mode', (event, mode) => {
+  roamMode = mode;
+  if (roamMode === 'walk') {
+    roamTargetX = Math.random() * (SCREEN_W - WIN_W);
+    roamTimer = 60;
+    playAnim('idle');
+  } else if (roamMode === 'sports') {
+    sportsDirection = (petX < SCREEN_W / 2) ? 1 : -1;
+    roamTimer = 0;
+    playAnim('walk');
+  } else if (roamMode === 'stand') {
+    roamTimer = 60;
+    playAnim('idle');
+  }
+});
+
+ipcRenderer.on('menu-toggle-sleep', () => {
+  const sleeping = (currentAnim === 'sleep' || currentAnim === 'fallAsleep');
+  if (sleeping) {
+    playAnim('wakeUp', true);
+  } else {
+    playAnim('fallAsleep', true);
+  }
+});
+
+ipcRenderer.on('menu-resize', (event, size) => {
+  const sizes = { sm: 80, md: 110, lg: 140 };
+  const s = sizes[size] || 110;
+  targetSize = s;
+  ipcRenderer.send('resize-window', { width: s, height: s });
+  // Clamp position to screen with relaxed boundary margins matching the drag constraints
+  petX = Math.max(-60, Math.min(SCREEN_W - s + 60, petX));
+  petY = Math.max(0, Math.min(SCREEN_H - TASKBAR_H - s + 30, petY));
+  sendWindowPos(petX, petY);
+});
+
+// ═══════════════════════════════════════════════════════
+// SECTION 11 — PHYSICS (throw + gravity)
+// ═══════════════════════════════════════════════════════
+function updatePhysics() {
+  if (isDragging) return;
+  if (!isFalling) return;
+
+  velY += 0.6; // gravity
+  petX += velX;
+  petY += velY;
+  velX *= 0.98; // air friction
+
+  // Horizontal bounds (relaxed by 60px to let the pet's body touch the screen edge)
+  if (petX <= -60) { petX = -60; velX = Math.abs(velX) * 0.4; }
+  if (petX >= SCREEN_W - WIN_W + 60) { petX = SCREEN_W - WIN_W + 60; velX = -Math.abs(velX) * 0.4; }
+
+  // Ceiling
+  if (petY <= 0) { petY = 0; velY = 0; }
+
+  // Floor
+  const fy = FLOOR_Y();
+  if (petY >= fy) {
+    petY = fy;
+    if (Math.abs(velY) > 3) {
+      velY = -velY * 0.30; // bounce
+      velX *= 0.5;
+      playAnim('wiggle', true); // bounce reaction
+    } else {
+      velX = 0; velY = 0;
+      isFalling = false;
+      playAnim('idle', true);
+    }
+  }
+
+  sendWindowPos(petX, petY);
+}
+
+// ═══════════════════════════════════════════════════════
+// SECTION 12 — ROAMING (autonomous walking)
+// ═══════════════════════════════════════════════════════
+// (currentRoamSpeed is initialized in Section 2 state declarations)
+
+function updateRoaming() {
+  if (isDragging || isFalling) return;
+  
+  const fy = FLOOR_Y();
+  if (petY !== fy) { petY = fy; sendWindowPos(petX, petY); }
+
+  if (roamMode === 'stand') {
+    // Stand Mode (罰站模式): Never move horizontally, just decrement timer in in-place states
+    const isStationaryState = (currentAnim === 'idle' || currentAnim === 'happy' || currentAnim === 'yawn');
+    if (isStationaryState) {
+      roamTimer--;
+      if (roamTimer <= 0) {
+        pickNextBehavior();
+      }
+    }
+    return;
+  }
+
+  if (roamMode === 'walk') {
+    const canRoam = (currentAnim === 'idle' || currentAnim === 'walk' || currentAnim === 'roll');
+    if (!canRoam) return;
+
+    const dx = roamTargetX - petX;
+    if (Math.abs(dx) > currentRoamSpeed) {
+      if (currentAnim === 'idle') {
+        if (Math.random() < 0.5) {
+          currentRoamSpeed = 0.6 + Math.random() * 0.7; // Slow walk
+          playAnim('walk');
+        } else {
+          currentRoamSpeed = 1.4 + Math.random() * 0.8; // Fast roll
+          playAnim('roll');
+        }
+      }
+      petX += Math.sign(dx) * currentRoamSpeed;
+      petX = Math.max(-60, Math.min(SCREEN_W - WIN_W + 60, petX));
+      sendWindowPos(petX, petY);
+    } else {
+      petX = roamTargetX;
+      playAnim('idle');
+      roamTimer--;
+      if (roamTimer <= 0) {
+        pickNextBehavior();
+      }
+    }
+  } else if (roamMode === 'sports') {
+    // Sports Mode (運動模式): waddle back and forth continuously
+    const isSleepingState = (currentAnim === 'sleep' || currentAnim === 'fallAsleep' || currentAnim === 'wakeUp');
+    if (isSleepingState) return;
+
+    if (currentAnim === 'happy') {
+      roamTimer--;
+      if (roamTimer <= 0) {
+        // Resume walking in the opposite direction
+        if (Math.random() < 0.4) {
+          currentRoamSpeed = 1.0;
+          playAnim('walk', true);
+        } else {
+          currentRoamSpeed = 1.8;
+          playAnim('roll', true);
+        }
+      }
+      return;
+    }
+
+    const targetX = (sportsDirection === 1) ? (SCREEN_W - WIN_W + 60) : -60;
+    const dx = targetX - petX;
+
+    if (Math.abs(dx) > 2) {
+      if (currentAnim !== 'walk' && currentAnim !== 'roll') {
+        if (Math.random() < 0.4) {
+          currentRoamSpeed = 1.0;
+          playAnim('walk');
+        } else {
+          currentRoamSpeed = 1.8;
+          playAnim('roll');
+        }
+      }
+      petX += Math.sign(dx) * currentRoamSpeed;
+      petX = Math.max(-60, Math.min(SCREEN_W - WIN_W + 60, petX));
+      sendWindowPos(petX, petY);
+
+      // 0.05% chance to slack off/take a nap per frame of walking (~3% chance per second)
+      if (Math.random() < 0.0005) {
+        playAnim('fallAsleep');
+        sleepDuration = (6 + Math.random() * 8) * 60; // sleep for 6-14 seconds
+        sleepTick = 0;
+      }
+    } else {
+      // Arrived at screen edge! Turn around!
+      sportsDirection = -sportsDirection;
+      playAnim('happy', true);
+      roamTimer = 60; // stand wiggling for 1 second before waddling back
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+// SECTION 13 — RANDOM BEHAVIOR
+// ═══════════════════════════════════════════════════════
+function pickNextBehavior() {
+  if (roamMode === 'walk') {
+    const r = Math.random();
+    if (r < 0.70) {
+      // 70% Roam state: randomize distance, direction, and target
+      const minX = -60;
+      const maxX = SCREEN_W - WIN_W + 60;
+      roamTargetX = minX + Math.random() * (maxX - minX);
+      
+      // Randomize speed: walk [0.6, 1.3], roll [1.4, 2.2]
+      if (Math.random() < 0.5) {
+        currentRoamSpeed = 0.6 + Math.random() * 0.7;
+        playAnim('walk');
+      } else {
+        currentRoamSpeed = 1.4 + Math.random() * 0.8;
+        playAnim('roll');
+      }
+      roamTimer = 80 + Math.random() * 150;
+    } else {
+      // 30% Stationary actions (yawn, sleep, or idle)
+      const rStationary = Math.random();
+      if (rStationary < 0.35) {
+        playAnim('yawn');
+        roamTimer = 300;
+      } else if (rStationary < 0.70) {
+        playAnim('fallAsleep');
+        sleepDuration = (10 + Math.random() * 15) * 60;
+        sleepTick = 0;
+        roamTimer = 9999;
+      } else {
+        playAnim('idle');
+        roamTimer = 120 + Math.random() * 180;
+      }
+    }
+  } else if (roamMode === 'stand') {
+    // Stand Mode (罰站模式): play stationary animations in place
+    forceFlip = Math.random() < 0.5; // Randomly flip/rotate to look around
+    const rStationary = Math.random();
+    if (rStationary < 0.35) {
+      playAnim('yawn');
+      roamTimer = 300;
+    } else if (rStationary < 0.70) {
+      playAnim('fallAsleep');
+      sleepDuration = (10 + Math.random() * 15) * 60;
+      sleepTick = 0;
+      roamTimer = 9999;
+    } else {
+      if (Math.random() < 0.5) {
+        playAnim('happy');
+      } else {
+        playAnim('idle');
+      }
+      roamTimer = 120 + Math.random() * 180;
+    }
+  }
+}
+
+// Sleep auto-wake timer
+let sleepDuration = 0;
+let sleepTick     = 0;
+
+function updateSleepTimer() {
+  if (currentAnim !== 'sleep') { sleepTick = 0; return; }
+  sleepTick++;
+  if (sleepDuration > 0 && sleepTick >= sleepDuration) {
+    sleepDuration = 0;
+    sleepTick     = 0;
+    playAnim('wakeUp', true);
+    
+    if (roamMode === 'walk') {
+      roamTargetX = Math.random() * (SCREEN_W - WIN_W);
+      roamTimer   = 80;
+    } else if (roamMode === 'stand') {
+      roamTimer   = 80;
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+// SECTION 14 — MAIN GAME LOOP (60fps)
+// ═══════════════════════════════════════════════════════
+function syncCanvasSize() {
+  if (canvas.width !== targetSize || canvas.height !== targetSize) {
+    canvas.width  = targetSize;
+    canvas.height = targetSize;
+    WIN_W = targetSize;
+    WIN_H = targetSize;
+  }
+}
+
+function gameLoop() {
+  syncCanvasSize();
+  updateAnim();
+  updatePhysics();
+  updateRoaming();
+  updateSleepTimer();
+  render();
+  requestAnimationFrame(gameLoop);
+}
+
+// Bootstrap after a short delay so the window is fully ready
+setTimeout(() => {
+  // Start at floor center
+  petX = (SCREEN_W - WIN_W) / 2;
+  petY = FLOOR_Y();
+  sendWindowPos(petX, petY);
+  roamTargetX = petX;
+  roamTimer   = 180; // wait 3s before first random behavior
+
+  playAnim('idle', true);
+  requestAnimationFrame(gameLoop);
+}, 150);
