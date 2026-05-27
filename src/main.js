@@ -26,7 +26,7 @@ function createWindow() {
   mainWindow.setMinimumSize(WIN_SIZE, WIN_SIZE);
   mainWindow.setMaximumSize(WIN_SIZE, WIN_SIZE);
 
-  mainWindow.loadFile('index.html');
+  mainWindow.loadFile(path.join(__dirname, 'index.html'));
 
   // Forward renderer console messages to terminal for debugging
   mainWindow.webContents.on('console-message', (event, level, message, line, sourceId) => {
@@ -68,7 +68,7 @@ function createWindow() {
   // Native Context Menu Handler with dynamic skin scanning
   ipcMain.on('show-context-menu', (event, { roamMode, sleeping, activeSkin }) => {
     const fs = require('fs');
-    const petsDir = path.join(__dirname, 'pets');
+    const petsDir = path.join(__dirname, '..', 'pets');
     const skins = [];
     if (fs.existsSync(petsDir)) {
       const dirs = fs.readdirSync(petsDir);

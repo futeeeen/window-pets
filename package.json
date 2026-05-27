@@ -2,7 +2,7 @@
   "name": "desktop-pet-gulpin",
   "version": "1.0.0",
   "description": "3D Desktop Pet Gulpin built with Electron and Three.js",
-  "main": "main.js",
+  "main": "src/main.js",
   "scripts": {
     "start": "electron ."
   },

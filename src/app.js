@@ -222,7 +222,7 @@ function loadSkin(skinId) {
   const fs = require('fs');
   const path = require('path');
   
-  const skinDir = path.join(__dirname, 'pets', skinId);
+  const skinDir = path.join(__dirname, '..', 'pets', skinId);
   const configPath = path.join(skinDir, 'config.json');
   const spritePath = path.join(skinDir, 'sprites.png');
 
