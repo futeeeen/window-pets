@@ -70,8 +70,9 @@ window-pets/
 
 ## 🎨 創作者指南：如何設計並導入一個新寵物外觀？
 
-我們為創作者提供了一個**極致便利的 2.0 模組化引擎**。如果您想要自己設計一套桌寵外觀，請參照專案內的 AI 專用設計說明書：
-👉 [ai_creator_prompt.md](file:///C:/Users/futen/.gemini/antigravity/brain/ec0eeb05-caa0-4c7b-bf57-9c19bfa5f0c1/ai_creator_prompt.md) (您可以直接將其複製給 Midjourney, Stable Diffusion 或 Gemini/Claude 以自動生成完全符合規格的去背精靈圖)。
+我們為創作者提供了一個**極致便利的 2.0 模組化引擎**。如果您想要自己設計一套桌寵外觀，請參照以下設計說明書：
+* 📏 **設計與對齊標準**：👉 [spritesheet_standard.md](file:///c:/futen/Project/Pets/pets/spritesheet_standard.md) (精確的 250x200 動作網格、最大寬高限制、地板線對齊標準規範)。
+* 🤖 **AI 繪圖提示詞**：👉 [ai_creator_prompt.md](file:///C:/Users/futen/.gemini/antigravity/brain/ec0eeb05-caa0-4c7b-bf57-9c19bfa5f0c1/ai_creator_prompt.md) (可以直接將其複製給 Midjourney, Stable Diffusion 或 Gemini/Claude 以自動生成符合規格的去背精靈圖)。
 
 ### 💡 創作者導入三步驟：
 1. **建立文件夾**：在 `pets/` 目錄下建立一個全新資料夾，例如 `pets/pikachu/`。

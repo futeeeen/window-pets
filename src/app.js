@@ -81,6 +81,8 @@ let roamTimer   = 120;
 let ROW1 = [];
 let ROW2 = [];
 let ROW3 = [];
+let ROW4 = [];
+let ROW5 = [];
 let ANIMS = {};
 
 function rebuildAnimations() {
@@ -260,6 +262,8 @@ function loadSkin(skinId) {
     ROW1 = coordinates.row1;
     ROW2 = coordinates.row2;
     ROW3 = coordinates.row3;
+    ROW4 = coordinates.row4 || [];
+    ROW5 = coordinates.row5 || [];
     console.log(`Loaded custom coordinates for ${petName}`);
   } else {
     // 2. Standard 250x200 Grid Layout fallback mode
@@ -278,6 +282,8 @@ function loadSkin(skinId) {
     ROW1 = makeGridFrames(0, 5);
     ROW2 = makeGridFrames(1, 4);
     ROW3 = makeGridFrames(2, 4);
+    ROW4 = makeGridFrames(3, 5); // Row 4 (5 frames): run / jump / slide
+    ROW5 = makeGridFrames(4, 5); // Row 5 (5 frames): emotions / chats
     console.log(`Loaded standard 250x200 grid coordinates for ${petName}`);
   }
 
