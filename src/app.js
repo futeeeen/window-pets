@@ -244,6 +244,13 @@ function rebuildAnimations(isCustom) {
         fps: 5,
         loop: false,
         next: 'idle'
+      },
+      // Cute / Happy cute action (occasional acting cute)
+      cute: {
+        frames: [ROW2[4], ROW1[0]],
+        fps: 2,
+        loop: false,
+        next: 'idle'
       }
     };
   }
@@ -805,16 +812,19 @@ function pickNextBehavior() {
       }
       roamTimer = 80 + Math.random() * 150;
     } else {
-      // 30% Stationary actions (yawn, sleep, or idle)
+      // 30% Stationary actions (yawn, sleep, idle, or acting cute)
       const rStationary = Math.random();
-      if (rStationary < 0.35) {
+      if (rStationary < 0.30) {
         playAnim('yawn');
         roamTimer = 300;
-      } else if (rStationary < 0.70) {
+      } else if (rStationary < 0.60) {
         playAnim('fallAsleep');
         sleepDuration = (10 + Math.random() * 15) * 60;
         sleepTick = 0;
         roamTimer = 9999;
+      } else if (rStationary < 0.80 && ANIMS.cute) {
+        playAnim('cute');
+        roamTimer = 180; // act cute for 3 seconds
       } else {
         playAnim('idle');
         roamTimer = 120 + Math.random() * 180;
@@ -824,14 +834,17 @@ function pickNextBehavior() {
     // Stand Mode (罰站模式): play stationary animations in place
     forceFlip = Math.random() < 0.5; // Randomly flip/rotate to look around
     const rStationary = Math.random();
-    if (rStationary < 0.35) {
+    if (rStationary < 0.30) {
       playAnim('yawn');
       roamTimer = 300;
-    } else if (rStationary < 0.70) {
+    } else if (rStationary < 0.55) {
       playAnim('fallAsleep');
       sleepDuration = (10 + Math.random() * 15) * 60;
       sleepTick = 0;
       roamTimer = 9999;
+    } else if (rStationary < 0.75 && ANIMS.cute) {
+      playAnim('cute');
+      roamTimer = 180; // act cute for 3 seconds
     } else {
       if (Math.random() < 0.5) {
         playAnim('happy');
