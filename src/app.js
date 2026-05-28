@@ -85,104 +85,168 @@ let ROW4 = [];
 let ROW5 = [];
 let ANIMS = {};
 
-function rebuildAnimations() {
-  ANIMS = {
-    // Default resting pose — single frame + CSS-like breathing in code
-    idle: {
-      frames: [ROW1[0]],
-      fps: 2,
-      loop: true,
-      next: null
-    },
-
-    // Slow walk (idle + leaning forward)
-    walk: {
-      frames: [ROW1[0], ROW2[3]],
-      fps: 3.5,
-      loop: true,
-      next: null
-    },
-
-    // Fast roll (idle + leaning + rolling/sliding)
-    roll: {
-      frames: [ROW1[0], ROW2[3], ROW3[3], ROW2[3]],
-      fps: 5.5,
-      loop: true,
-      next: null
-    },
-
-    // Yawn sequence (row1 frames 0→4)
-    yawn: {
-      frames: [...ROW1],
-      fps: 5,
-      loop: false,
-      next: 'idle'
-    },
-
-    // Falling asleep transition: row1[0] → row2[0] → row2[1]
-    fallAsleep: {
-      frames: [ROW1[0], ROW2[0], ROW2[1]],
-      fps: 3,
-      loop: false,
-      next: 'sleep'
-    },
-
-    // Main sleep loop — alternates between flat-asleep and deep-sleep-bubbles
-    sleep: {
-      frames: [ROW2[1], ROW2[2], ROW2[1], ROW2[3]],
-      fps: 1.5,
-      loop: true,
-      next: null
-    },
-
-    // Wake up: reverse the fall-asleep
-    wakeUp: {
-      frames: [ROW2[1], ROW2[0], ROW1[0]],
-      fps: 4,
-      loop: false,
-      next: 'idle'
-    },
-
-    // Eating cake (loops while food is active)
-    eatCake: {
-      frames: [ROW3[0], ROW1[0]],
-      fps: 4,
-      loop: false,
-      next: 'happy'
-    },
-
-    // Eating apple
-    eatApple: {
-      frames: [ROW3[1], ROW1[0]],
-      fps: 4,
-      loop: false,
-      next: 'happy'
-    },
-
-    // Content / satisfied after eating
-    happy: {
-      frames: [ROW3[2], ROW3[3], ROW3[2], ROW3[3], ROW1[0]],
-      fps: 6,
-      loop: false,
-      next: 'idle'
-    },
-
-    // Quick wiggle when petted
-    wiggle: {
-      frames: [ROW3[3], ROW3[2], ROW3[3], ROW3[2], ROW1[0]],
-      fps: 7,
-      loop: false,
-      next: 'idle'
-    },
-
-    // Surprised/dragged — use the agitated sleep-fall frame
-    drag: {
-      frames: [ROW2[0]],
-      fps: 2,
-      loop: true,
-      next: null
-    }
-  };
+function rebuildAnimations(isCustom) {
+  if (isCustom) {
+    // Custom Coordinates Mode (Backward compatible, e.g. for Gulpin)
+    ANIMS = {
+      idle: {
+        frames: [ROW1[0]],
+        fps: 2,
+        loop: true,
+        next: null
+      },
+      walk: {
+        frames: [ROW1[0], ROW2[3]],
+        fps: 3.5,
+        loop: true,
+        next: null
+      },
+      roll: {
+        frames: [ROW1[0], ROW2[3], ROW3[3], ROW2[3]],
+        fps: 5.5,
+        loop: true,
+        next: null
+      },
+      yawn: {
+        frames: [...ROW1],
+        fps: 5,
+        loop: false,
+        next: 'idle'
+      },
+      fallAsleep: {
+        frames: [ROW1[0], ROW2[0], ROW2[1]],
+        fps: 3,
+        loop: false,
+        next: 'sleep'
+      },
+      sleep: {
+        frames: [ROW2[1], ROW2[2], ROW2[1], ROW2[3]],
+        fps: 1.5,
+        loop: true,
+        next: null
+      },
+      wakeUp: {
+        frames: [ROW2[1], ROW2[0], ROW1[0]],
+        fps: 4,
+        loop: false,
+        next: 'idle'
+      },
+      eatCake: {
+        frames: [ROW3[0], ROW1[0]],
+        fps: 4,
+        loop: false,
+        next: 'happy'
+      },
+      eatApple: {
+        frames: [ROW3[1], ROW1[0]],
+        fps: 4,
+        loop: false,
+        next: 'happy'
+      },
+      happy: {
+        frames: [ROW3[2], ROW3[3], ROW3[2], ROW3[3], ROW1[0]],
+        fps: 6,
+        loop: false,
+        next: 'idle'
+      },
+      wiggle: {
+        frames: [ROW3[3], ROW3[2], ROW3[3], ROW3[2], ROW1[0]],
+        fps: 7,
+        loop: false,
+        next: 'idle'
+      },
+      drag: {
+        frames: [ROW2[0]],
+        fps: 2,
+        loop: true,
+        next: null
+      }
+    };
+  } else {
+    // New Standardized Redefined Layout Mode (Zero-Config, e.g. for Ditto and future skins)
+    ANIMS = {
+      idle: {
+        frames: [ROW1[0]], // front-facing resting pose
+        fps: 2,
+        loop: true,
+        next: null
+      },
+      walk: {
+        frames: [ROW3[3], ROW3[4]], // walk frame 1 (lean/step) -> walk frame 2 (in-between)
+        fps: 3.5,
+        loop: true,
+        next: null
+      },
+      roll: {
+        frames: [ROW4[0], ROW4[1]], // use high speed Run frames for fast roll/waddle!
+        fps: 6.5,
+        loop: true,
+        next: null
+      },
+      yawn: {
+        frames: [ROW1[0], ROW1[1], ROW1[1], ROW1[0]], // front face -> mouth open/small action -> front face
+        fps: 3,
+        loop: false,
+        next: 'idle'
+      },
+      fallAsleep: {
+        frames: [ROW1[0], ROW2[0], ROW2[1]], // front -> surprised/dragged -> sleep flat
+        fps: 3.5,
+        loop: false,
+        next: 'sleep'
+      },
+      sleep: {
+        frames: [ROW2[1], ROW2[2]], // sleep flat -> sleep snoring/deep
+        fps: 1.5,
+        loop: true,
+        next: null
+      },
+      wakeUp: {
+        frames: [ROW2[3], ROW1[0]], // suddenly startled awake -> front idle
+        fps: 4,
+        loop: false,
+        next: 'idle'
+      },
+      eatCake: {
+        frames: [ROW3[0], ROW3[1], ROW3[1], ROW3[2]], // mouth open -> eating -> chewing -> content
+        fps: 4,
+        loop: false,
+        next: 'happy'
+      },
+      eatApple: {
+        frames: [ROW3[0], ROW3[1], ROW3[1], ROW3[2]],
+        fps: 4,
+        loop: false,
+        next: 'happy'
+      },
+      happy: {
+        frames: [ROW3[2], ROW1[0]], // satisfied grin -> front idle
+        fps: 4,
+        loop: false,
+        next: 'idle'
+      },
+      wiggle: {
+        frames: [ROW3[2], ROW1[0], ROW3[2], ROW1[0]],
+        fps: 6,
+        loop: false,
+        next: 'idle'
+      },
+      drag: {
+        frames: [ROW2[0]], // grabbed/suspended
+        fps: 2,
+        loop: true,
+        next: null
+      },
+      
+      // New Standard Jump Animation
+      jump: {
+        frames: [ROW3[3], ROW4[3], ROW4[2], ROW4[3], ROW4[4], ROW3[3]],
+        fps: 5,
+        loop: false,
+        next: 'idle'
+      }
+    };
+  }
 }
 
 // ═══════════════════════════════════════════════════════
@@ -257,6 +321,7 @@ function loadSkin(skinId) {
     }
   }
 
+  let isCustom = false;
   if (coordinates && coordinates.row1 && coordinates.row2 && coordinates.row3) {
     // 1. Advanced Custom Coordinates Mode
     ROW1 = coordinates.row1;
@@ -264,6 +329,7 @@ function loadSkin(skinId) {
     ROW3 = coordinates.row3;
     ROW4 = coordinates.row4 || [];
     ROW5 = coordinates.row5 || [];
+    isCustom = true;
     console.log(`Loaded custom coordinates for ${petName}`);
   } else {
     // 2. Standard 250x200 Grid Layout fallback mode
@@ -280,15 +346,16 @@ function loadSkin(skinId) {
     }
     
     ROW1 = makeGridFrames(0, 5);
-    ROW2 = makeGridFrames(1, 4);
-    ROW3 = makeGridFrames(2, 4);
-    ROW4 = makeGridFrames(3, 5); // Row 4 (5 frames): run / jump / slide
-    ROW5 = makeGridFrames(4, 5); // Row 5 (5 frames): emotions / chats
+    ROW2 = makeGridFrames(1, 5);
+    ROW3 = makeGridFrames(2, 5);
+    ROW4 = makeGridFrames(3, 5);
+    ROW5 = makeGridFrames(4, 5);
+    isCustom = false;
     console.log(`Loaded standard 250x200 grid coordinates for ${petName}`);
   }
 
   // Hot-rebuild animations using the new frame array references
-  rebuildAnimations();
+  rebuildAnimations(isCustom);
 
   // Reload sprites off-screen
   loadAndProcessSprites(spritePath);
